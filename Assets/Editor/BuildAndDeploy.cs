@@ -28,7 +28,7 @@ public class BuildAndDeploy
         try
         {
             ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = "bash"; // or "cmd.exe" on Windows
+            psi.FileName = "cmd.exe";
             psi.Arguments = "deploy.sh";
             psi.WorkingDirectory = Application.dataPath + "/..";
             psi.CreateNoWindow = true;
