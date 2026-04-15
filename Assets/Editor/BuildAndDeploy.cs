@@ -1,6 +1,8 @@
 using UnityEditor;
+using UnityEditor.Build.Reporting;
 using UnityEngine;
 using System.Diagnostics;
+using System.IO;
 
 public class BuildAndDeploy
 {
@@ -9,17 +11,21 @@ public class BuildAndDeploy
     {
         string buildPath = "Builds/WebGL";
 
-        // Build WebGL
-        BuildPipeline.BuildPlayer(
+        BuildReport report = BuildPipeline.BuildPlayer(
             EditorBuildSettings.scenes,
             buildPath,
             BuildTarget.WebGL,
             BuildOptions.None
         );
 
-        UnityEngine.Debug.Log("Build complete!");
+        if (report.summary.result != BuildResult.Succeeded)
+        {
+            UnityEngine.Debug.LogError("Build failed. Deploy skipped.");
+            return;
+        }
 
-        // Run deploy script
+        UnityEngine.Debug.Log("Build complete.");
+
         RunDeployScript();
     }
 
@@ -27,21 +33,47 @@ public class BuildAndDeploy
     {
         try
         {
-            ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = "cmd.exe";
-            psi.Arguments = "deploy.sh";
-            psi.WorkingDirectory = Application.dataPath + "/..";
-            psi.CreateNoWindow = true;
-            psi.UseShellExecute = false;
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string deployScript = Path.Combine(projectRoot, "Assets", "Editor", "deploy.bat");
 
-            Process process = Process.Start(psi);
-            process.WaitForExit();
+            if (!File.Exists(deployScript))
+            {
+                UnityEngine.Debug.LogError("Deploy script not found: " + deployScript);
+                return;
+            }
 
-            UnityEngine.Debug.Log("Deploy complete!");
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/d /c \"\"" + deployScript + "\"\"",
+                WorkingDirectory = projectRoot,
+                CreateNoWindow = false,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using (Process process = new Process())
+            {
+                process.StartInfo = psi;
+                process.Start();
+
+                string stdout = process.StandardOutput.ReadToEnd();
+                string stderr = process.StandardError.ReadToEnd();
+
+                process.WaitForExit();
+
+                UnityEngine.Debug.Log("Deploy stdout:\n" + stdout);
+
+                if (!string.IsNullOrWhiteSpace(stderr))
+                    UnityEngine.Debug.LogError("Deploy stderr:\n" + stderr);
+
+                UnityEngine.Debug.Log("Deploy exit code: " + process.ExitCode);
+            }
         }
         catch (System.Exception e)
         {
-            UnityEngine.Debug.LogError("Deploy failed: " + e.Message);
+            UnityEngine.Debug.LogError("Deploy failed: " + e);
         }
     }
 }
